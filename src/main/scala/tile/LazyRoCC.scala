@@ -405,6 +405,20 @@ class RoccCommandRouter(opcodes: Seq[OpcodeSet])(implicit p: Parameters)
     val busy = Output(Bool())
   })
 
+
+  // Observer only: CPU-side handshake, before the router's own command queue.
+  if (p(RoCCRunLedDebugKey)) {
+    require(opcodes.size == 1, "RUN LED diagnostics require one RoCC accelerator")
+    val runLedTarget = io.in.bits.inst.opcode === RoCCRunLedDebug.opcode.U
+    val runLedClear = io.in.fire && runLedTarget &&
+      io.in.bits.inst.funct === RoCCRunLedDebug.config1.U
+    val runLedPresented = io.in.valid && runLedTarget &&
+      io.in.bits.inst.funct === RoCCRunLedDebug.run.U
+    RoCCRunLedDebug.latch(runLedClear, runLedPresented, RoCCRunLedDebug.cpuPresented)
+    RoCCRunLedDebug.latch(runLedClear, runLedPresented && io.in.ready,
+      RoCCRunLedDebug.cpuAccepted)
+  }
+
   val cmd = Queue(io.in)
   val cmdReadys = io.out.zip(opcodes).map { case (out, opcode) =>
     val me = opcode.matches(cmd.bits.inst.opcode)
